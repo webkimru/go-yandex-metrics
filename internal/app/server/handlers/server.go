@@ -89,6 +89,8 @@ func (m *Repository) PostMetrics(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		w.WriteHeader(http.StatusOK)
+		return
 
 	case Counter:
 		value, err := utils.GetInt64ValueFromSting(metric["value"])
@@ -103,6 +105,8 @@ func (m *Repository) PostMetrics(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		w.WriteHeader(http.StatusOK)
+		return
 
 	default:
 		w.WriteHeader(http.StatusBadRequest)
@@ -128,6 +132,7 @@ func (m *Repository) GetMetric(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+		return
 
 	case Gauge:
 		res, err := m.Store.GetGauge(name)
@@ -143,6 +148,7 @@ func (m *Repository) GetMetric(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
+		return
 	}
 
 	w.WriteHeader(http.StatusNotFound)

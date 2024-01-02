@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/webkimru/go-yandex-metrics/internal/app/server"
+	"github.com/webkimru/go-yandex-metrics/internal/app/server/middleware"
 	"log"
 	"net/http"
 )
@@ -16,6 +17,6 @@ func main() {
 	}
 
 	// стартуем сервер
-	err = http.ListenAndServe(*serverAddress, server.Middleware(server.Routes()))
+	err = http.ListenAndServe(*serverAddress, middleware.TextPlain(server.Routes()))
 	panic(err)
 }

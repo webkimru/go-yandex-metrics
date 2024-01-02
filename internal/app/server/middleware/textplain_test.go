@@ -1,4 +1,4 @@
-package server
+package middleware
 
 import (
 	"net/http"
@@ -10,6 +10,6 @@ func TestMiddleware(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/", nil)
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
 	w := httptest.NewRecorder()
-	h := Middleware(testHandler)
+	h := TextPlain(testHandler)
 	h.ServeHTTP(w, req)
 }
