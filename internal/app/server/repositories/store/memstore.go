@@ -25,23 +25,21 @@ func NewMemStorage() *MemStorage {
 
 // UpdateCounter обновляем поле Counter
 // описываем метод в соответствии с контактном интерфейсного типа StoreRepository
-func (ms *MemStorage) UpdateCounter(name string, value int64) error {
+func (ms *MemStorage) UpdateCounter(name string, value int64) (int64, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
 	ms.Counter[name] += Counter(value)
-	//log.Printf("%#v", ms)
-	return nil
+	return int64(ms.Counter[name]), nil
 }
 
 // UpdateGauge обновляем поле UpdateGauge
-func (ms *MemStorage) UpdateGauge(name string, value float64) error {
+func (ms *MemStorage) UpdateGauge(name string, value float64) (float64, error) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 
 	ms.Gauge[name] = Gauge(value)
-	//log.Printf("%#v", ms)
-	return nil
+	return float64(ms.Gauge[name]), nil
 }
 
 func (ms *MemStorage) GetCounter(metric string) (int64, error) {

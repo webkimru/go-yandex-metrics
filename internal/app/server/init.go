@@ -3,6 +3,7 @@ package server
 import (
 	"flag"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/handlers"
+	"github.com/webkimru/go-yandex-metrics/internal/app/server/logger"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/repositories/store"
 	"os"
 )
@@ -17,6 +18,10 @@ func Setup() (*string, error) {
 	// определяем переменные окружения
 	if envRunAddr := os.Getenv("ADDRESS"); envRunAddr != "" {
 		serverAddress = &envRunAddr
+	}
+
+	if err := logger.Initialize("info"); err != nil {
+		return nil, err
 	}
 
 	// задаем вариант хранения
