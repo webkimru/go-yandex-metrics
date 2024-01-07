@@ -38,7 +38,7 @@ func TestSendMetric(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			SendMetric(tt.metric, "http://localhost:8080")
+			SendMetric(tt.metric, "localhost:8080")
 		})
 	}
 }

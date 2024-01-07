@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/webkimru/go-yandex-metrics/internal/app/agent/metrics"
 	"log"
@@ -49,7 +51,6 @@ func GetMetric(m *metrics.Metric, pollInterval int) {
 		m.RandomValue = metrics.Gauge(rand.Float64())
 		m.PollCount++
 
-		//log.Println(m.PollCount)
 		time.Sleep(pollDuration)
 	}
 }
@@ -57,48 +58,87 @@ func GetMetric(m *metrics.Metric, pollInterval int) {
 func SendMetric(metric metrics.Metric, path string) {
 
 	val := reflect.ValueOf(&metric)
-
 	val = val.Elem()
 	for fieldIndex := 0; fieldIndex < val.NumField(); fieldIndex++ {
 		field := val.Field(fieldIndex)
-		//fmt.Printf("\tField %v: type %v - val :%v\n", val.Type().Field(fieldIndex).Name, field.Type(), field)
 		f := val.FieldByName(val.Type().Field(fieldIndex).Name)
+
 		switch f.Kind() {
 		case reflect.Int64:
-			//log.Printf("%s/update/counter/%s/%v", path, val.Type().Field(fieldIndex).Name, field)
 			go func(fieldIndex int) {
-				//log.Printf("%s/update/counter/%s/%v", path, val.Type().Field(fieldIndex).Name, field)
-				err := Send(fmt.Sprintf("http://%s/update/counter/%s/%v", path, val.Type().Field(fieldIndex).Name, field))
+				err := SendCounterJSON(fmt.Sprintf("http://%s/update/", path), val.Type().Field(fieldIndex).Name, field.Int())
 				if err != nil {
 					log.Println(err)
 				}
 
 			}(fieldIndex)
+
 		case reflect.Float64:
-			//log.Printf("%s/update/gauge/%s/%v", path, val.Type().Field(fieldIndex).Name, field)
 			go func(fieldIndex int) {
-				// log.Printf("%s/update/gauge/%s/%v", path, val.Type().Field(fieldIndex).Name, field)
-				err := Send(fmt.Sprintf("http://%s/update/gauge/%s/%v", path, val.Type().Field(fieldIndex).Name, field))
+				err := SendGaugeJSON(fmt.Sprintf("http://%s/update/", path), val.Type().Field(fieldIndex).Name, field.Float())
 				if err != nil {
 					log.Println(err)
 				}
-				//_, err := http.Post(fmt.Sprintf("%s/update/gauge/%s/%v", targetUrl, val.Type().Field(fieldIndex).Name, field), "text/plain", nil)
-				//if err != nil {
-				//	return
-				//}
 			}(fieldIndex)
 		}
 	}
 }
 
-func Send(url string) error {
-	client := &http.Client{}
-	req, err := http.NewRequest("POST", url, nil)
+func SendCounterJSON(url string, metric string, value int64) error {
+	request := struct {
+		ID    string `json:"id"`
+		MType string `json:"type"`
+		Delta int64  `json:"delta"`
+	}{
+		ID:    metric,
+		MType: "counter",
+		Delta: value,
+	}
+
+	if err := Send(url, request); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func SendGaugeJSON(url string, metric string, value float64) error {
+	request := struct {
+		ID    string  `json:"id"`
+		MType string  `json:"type"`
+		Value float64 `json:"value"`
+	}{
+		ID:    metric,
+		MType: "gauge",
+		Value: value,
+	}
+
+	if err := Send(url, request); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func Send(url string, request interface{}) error {
+	data, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request=%v", request)
+	}
+
+	b, err := Compress(data)
+	if err != nil {
+		return fmt.Errorf("failed Compress()=%v", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(b))
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "text/plain")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
 
+	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

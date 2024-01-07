@@ -16,6 +16,6 @@ func main() {
 	}
 
 	// стартуем сервер
-	err = http.ListenAndServe(*serverAddress, server.Middleware(server.Routes()))
+	err = http.ListenAndServe(*serverAddress, server.Routes())
 	panic(err)
 }
