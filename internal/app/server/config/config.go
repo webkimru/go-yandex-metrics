@@ -15,6 +15,9 @@ type RecorderConfig struct {
 }
 
 type AppConfig struct {
+	ServerAddress string
+	SecretKey     string
+	DatabaseDSN   string
 	StorePriority Store
 	FileStore     RecorderConfig
 }

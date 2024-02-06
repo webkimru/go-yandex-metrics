@@ -12,6 +12,7 @@ func Routes() http.Handler {
 	r := chi.NewRouter()
 	// вариант подвключения middleware
 	r.Use(middleware.WithLogging)
+	r.Use(middleware.WithSign)
 	r.Use(middleware.Gzip)
 	// text/plain
 	r.Group(func(r chi.Router) {

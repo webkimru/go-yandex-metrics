@@ -10,20 +10,19 @@ import (
 var m metrics.Metric
 
 func main() {
-
 	// настраиваем/инициализируем приложение
-	serverAddress, reportInterval, pollInterval, err := agent.Setup()
+	reportInterval, err := agent.Setup()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// получаем метрики
-	go agent.GetMetric(&m, *pollInterval)
+	go agent.GetMetric(&m)
 
 	// отдаем метрики
 	reportDuration := time.Duration(*reportInterval) * time.Second
 	for {
 		time.Sleep(reportDuration)
-		agent.SendMetric(m, *serverAddress)
+		agent.SendMetric(m)
 	}
 }

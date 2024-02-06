@@ -2,8 +2,12 @@ package agent
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/webkimru/go-yandex-metrics/internal/app/agent/config"
 	"github.com/webkimru/go-yandex-metrics/internal/app/agent/logger"
 	"github.com/webkimru/go-yandex-metrics/internal/app/agent/metrics"
 	"math/rand"
@@ -14,9 +18,10 @@ import (
 )
 
 var rt runtime.MemStats
+var app config.AppConfig
 
-func GetMetric(m *metrics.Metric, pollInterval int) {
-	pollDuration := time.Duration(pollInterval) * time.Second
+func GetMetric(m *metrics.Metric) {
+	pollDuration := time.Duration(app.PollInterval) * time.Second
 
 	for {
 		runtime.ReadMemStats(&rt)
@@ -55,7 +60,7 @@ func GetMetric(m *metrics.Metric, pollInterval int) {
 	}
 }
 
-func SendMetric(metric metrics.Metric, path string) {
+func SendMetric(metric metrics.Metric) {
 	var metricSlice []metrics.RequestMetric
 
 	val := reflect.ValueOf(&metric)
@@ -82,10 +87,9 @@ func SendMetric(metric metrics.Metric, path string) {
 	}
 
 	go func() {
-		err := Send(fmt.Sprintf("http://%s/updates/", path), metricSlice)
+		err := Send(fmt.Sprintf("http://%s/updates/", app.ServerAddress), metricSlice)
 		if err != nil {
 			logger.Log.Error(err)
-			return
 		}
 	}()
 }
@@ -96,17 +100,25 @@ func Send(url string, request interface{}) error {
 		return fmt.Errorf("failed to marshal request=%v", request)
 	}
 
-	b, err := Compress(data)
-	if err != nil {
+	// Compress data
+	if err := Compress(&data); err != nil {
 		return fmt.Errorf("failed Compress()=%v", err)
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(b))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(data))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
+	// Encrypt data
+	if app.SecretKey != "" {
+		// подписываем алгоритмом HMAC, используя SHA-256
+		h := hmac.New(sha256.New, []byte(app.SecretKey))
+		h.Write(data)
+		sign := h.Sum(nil)
+		req.Header.Set("HashSHA256", hex.EncodeToString(sign))
+	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
