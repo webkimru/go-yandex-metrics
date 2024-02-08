@@ -21,7 +21,7 @@ type MemStorage struct {
 func NewMemStorage() *MemStorage {
 	return &MemStorage{
 		Counter: make(map[string]Counter, 1),
-		Gauge:   make(map[string]Gauge, 28),
+		Gauge:   make(map[string]Gauge, 31),
 	}
 }
 

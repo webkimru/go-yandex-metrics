@@ -8,6 +8,7 @@ import (
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/file/async"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/handlers"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/logger"
+	"github.com/webkimru/go-yandex-metrics/internal/app/server/middleware"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/repositories/store"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/repositories/store/pg"
 	"log"
@@ -27,8 +28,8 @@ func Setup(ctx context.Context) (*string, error) {
 	storeInterval := flag.Int("i", 300, "store interval")
 	storeFilePath := flag.String("f", "/tmp/metrics-db.json", "file storage path")
 	storeRestore := flag.Bool("r", true, "restore saved data")
-	// DB
 	databaseDSN := flag.String("d", "", "database dsn")
+	secretKey := flag.String("k", "", "secret key")
 	// разбор командной строки
 	flag.Parse()
 	// определяем переменные окружения
@@ -55,23 +56,20 @@ func Setup(ctx context.Context) (*string, error) {
 	if envDatabaseDSN := os.Getenv("DATABASE_DSN"); envDatabaseDSN != "" {
 		databaseDSN = &envDatabaseDSN
 	}
+	if envSecretKey := os.Getenv("KEY"); envSecretKey != "" {
+		secretKey = &envSecretKey
+	}
 
 	// инициализируем логер
 	if err := logger.Initialize("info"); err != nil {
 		return nil, err
 	}
 
-	logger.Log.Infoln(
-		"Starting configuration:",
-		"ADDRESS", *serverAddress,
-		"STORE_INTERVAL", *storeInterval,
-		"FILE_STORAGE_PATH", *storeFilePath,
-		"RESTORE", *storeRestore,
-		"DATABASE_DSN", *databaseDSN,
-	)
-
 	// конфигурация приложения
 	a := config.AppConfig{
+		ServerAddress: *serverAddress,
+		SecretKey:     *secretKey,
+		DatabaseDSN:   *databaseDSN,
 		FileStore: config.RecorderConfig{
 			Interval: *storeInterval,
 			Restore:  *storeRestore,
@@ -79,6 +77,16 @@ func Setup(ctx context.Context) (*string, error) {
 		},
 	}
 	app = a
+
+	logger.Log.Infoln(
+		"Starting configuration:",
+		"ADDRESS", app.ServerAddress,
+		"STORE_INTERVAL", app.FileStore.Interval,
+		"FILE_STORAGE_PATH", app.FileStore.FilePath,
+		"RESTORE", app.FileStore.Restore,
+		"DATABASE_DSN", app.DatabaseDSN,
+		"KEY", app.SecretKey,
+	)
 
 	// инициализируем хранение метрик в файле
 	if err := file.Initialize(&app); err != nil {
@@ -95,9 +103,9 @@ func Setup(ctx context.Context) (*string, error) {
 	var storePriority config.Store
 	var repo *handlers.Repository
 	switch {
-	case *databaseDSN != "": // DB
+	case app.DatabaseDSN != "": // DB
 		storePriority = config.Database
-		conn, err := pg.ConnectToDB(*databaseDSN)
+		conn, err := pg.ConnectToDB(app.DatabaseDSN)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -113,7 +121,7 @@ func Setup(ctx context.Context) (*string, error) {
 		storePriority = config.Memory
 		storage := store.NewMemStorage()
 		// загружать ранее сохранённые значения из указанного файла при старте сервера
-		if *storeRestore {
+		if app.FileStore.Restore {
 			res, err := file.Reader()
 			if err != nil {
 				return nil, err
@@ -131,6 +139,8 @@ func Setup(ctx context.Context) (*string, error) {
 	// запоминаем вариант хранения
 	app.StorePriority = storePriority
 
+	// инициализируем
+	middleware.NewMiddleware(&app)
 	// инициализвруем хендлеры для работы с репозиторием
 	handlers.NewHandlers(repo, &app)
 

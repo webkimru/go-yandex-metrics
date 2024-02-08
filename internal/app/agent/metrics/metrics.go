@@ -34,6 +34,10 @@ type Metric struct {
 
 	RandomValue Gauge
 	PollCount   Counter
+
+	TotalMemory     Gauge
+	FreeMemory      Gauge
+	CPUutilization1 Gauge
 }
 
 type RequestMetric struct {
