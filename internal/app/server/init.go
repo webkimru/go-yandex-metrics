@@ -34,6 +34,7 @@ func Setup(ctx context.Context) (*string, error) {
 	databaseDSN := flag.String("d", "", "database dsn")
 	secretKey := flag.String("k", "", "secret key")
 	cryptoKey := flag.String("crypto-key", "", "path to pem private key file")
+	trustedSubnet := flag.String("t", "", "trusted subnet")
 	configuration := flag.String("c", "", "path to json configuration file")
 	// разбор командной строки
 	flag.Parse()
@@ -66,6 +67,9 @@ func Setup(ctx context.Context) (*string, error) {
 	}
 	if envCryptoKey := os.Getenv("CRYPTO_KEY"); envCryptoKey != "" {
 		cryptoKey = &envCryptoKey
+	}
+	if envTrustedSubnet := os.Getenv("TRUSTED_SUBNET"); envTrustedSubnet != "" {
+		trustedSubnet = &envTrustedSubnet
 	}
 	if envConfig := os.Getenv("CONFIG"); envConfig != "" {
 		configuration = &envConfig
@@ -110,6 +114,9 @@ func Setup(ctx context.Context) (*string, error) {
 	if *cryptoKey != "" {
 		app.CryptoKey = *cryptoKey
 	}
+	if *trustedSubnet != "" {
+		app.TrustedSubnet = *trustedSubnet
+	}
 	// обязательные настройки
 	if app.ServerAddress == "" {
 		return nil, fmt.Errorf("server address is not defined, it must be specified, for example, localhost:8080")
@@ -128,6 +135,7 @@ func Setup(ctx context.Context) (*string, error) {
 		"DATABASE_DSN", app.DatabaseDSN,
 		"KEY", app.SecretKey,
 		"CRYPTO_KEY", app.CryptoKey,
+		"TRUSTED_SUBNET", app.TrustedSubnet,
 	)
 
 	// инициализация ключей шифрования

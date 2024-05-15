@@ -19,6 +19,7 @@ func Setup() (int, error) {
 	secretKey := flag.String("k", "", "secret key")
 	rateLimit := flag.Int("l", 0, "rate limit (a number of workers)")
 	cryptoKey := flag.String("crypto-key", "", "path to pem public key file")
+	realIP := flag.String("i", "", "real ip")
 	configuration := flag.String("c", "", "path to json configuration file")
 
 	// разбор командой строки
@@ -54,6 +55,9 @@ func Setup() (int, error) {
 	}
 	if envCryptoKey := os.Getenv("CRYPTO_KEY"); envCryptoKey != "" {
 		cryptoKey = &envCryptoKey
+	}
+	if envRealIP := os.Getenv("REAL_IP"); envRealIP != "" {
+		realIP = &envRealIP
 	}
 	if envConfig := os.Getenv("CONFIG"); envConfig != "" {
 		configuration = &envConfig
@@ -96,6 +100,9 @@ func Setup() (int, error) {
 	if *cryptoKey != "" {
 		app.CryptoKey = *cryptoKey
 	}
+	if *realIP != "" {
+		app.RealIP = *realIP
+	}
 	// обязательные настройки
 	if app.ServerAddress == "" {
 		return 0, fmt.Errorf("destionation server address is not defined, it must be specified, for example, localhost:8080")
@@ -112,6 +119,10 @@ func Setup() (int, error) {
 		app.ReportInterval = 10 // silent default
 		logger.Log.Infof("default report interval is automatically set = %d", app.ReportInterval)
 	}
+	if app.RealIP == "" {
+		app.RealIP = "127.0.0.1"
+		logger.Log.Infof("default real ip is automatically set = %d", app.RealIP)
+	}
 
 	logger.Log.Infoln(
 		"Starting configuration:",
@@ -121,6 +132,7 @@ func Setup() (int, error) {
 		"KEY", app.SecretKey,
 		"CRYPTO_KEY", app.CryptoKey,
 		"RATE_LIMIT", app.RateLimit,
+		"REAL_IP", app.RealIP,
 	)
 
 	// инициализация ключей ассиметричного шифрования

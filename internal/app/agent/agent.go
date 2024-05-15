@@ -203,6 +203,7 @@ func Send(ctx context.Context, url string, request metrics.RequestMetricSlice) e
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("X-Real-IP", app.RealIP)
 	// Encrypt data
 	if app.SecretKey != "" {
 		// подписываем алгоритмом HMAC, используя SHA-256
