@@ -8,19 +8,25 @@ import (
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/config"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/file"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/file/async"
+	"github.com/webkimru/go-yandex-metrics/internal/app/server/grpc"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/handlers"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/logger"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/middleware"
+	"github.com/webkimru/go-yandex-metrics/internal/app/server/repositories"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/repositories/store"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/repositories/store/pg"
 	"github.com/webkimru/go-yandex-metrics/internal/security"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
 )
 
 var app config.AppConfig
+
+const (
+	HTTP = "HTTP"
+	GRPC = "GRPC"
+)
 
 // Setup будет полезна при инициализации зависимостей сервера перед запуском
 func Setup(ctx context.Context) (*string, error) {
@@ -34,6 +40,8 @@ func Setup(ctx context.Context) (*string, error) {
 	databaseDSN := flag.String("d", "", "database dsn")
 	secretKey := flag.String("k", "", "secret key")
 	cryptoKey := flag.String("crypto-key", "", "path to pem private key file")
+	trustedSubnet := flag.String("t", "", "trusted subnet")
+	serverProtocol := flag.String("s", "", "protocol: HTTP, GRPC")
 	configuration := flag.String("c", "", "path to json configuration file")
 	// разбор командной строки
 	flag.Parse()
@@ -66,6 +74,12 @@ func Setup(ctx context.Context) (*string, error) {
 	}
 	if envCryptoKey := os.Getenv("CRYPTO_KEY"); envCryptoKey != "" {
 		cryptoKey = &envCryptoKey
+	}
+	if envTrustedSubnet := os.Getenv("TRUSTED_SUBNET"); envTrustedSubnet != "" {
+		trustedSubnet = &envTrustedSubnet
+	}
+	if envServerProtocol := os.Getenv("SERVER_PROTOCOL"); envServerProtocol != "" {
+		serverProtocol = &envServerProtocol
 	}
 	if envConfig := os.Getenv("CONFIG"); envConfig != "" {
 		configuration = &envConfig
@@ -110,6 +124,12 @@ func Setup(ctx context.Context) (*string, error) {
 	if *cryptoKey != "" {
 		app.CryptoKey = *cryptoKey
 	}
+	if *trustedSubnet != "" {
+		app.TrustedSubnet = *trustedSubnet
+	}
+	if *serverProtocol != "" {
+		app.ServerProtocol = *serverProtocol
+	}
 	// обязательные настройки
 	if app.ServerAddress == "" {
 		return nil, fmt.Errorf("server address is not defined, it must be specified, for example, localhost:8080")
@@ -117,6 +137,10 @@ func Setup(ctx context.Context) (*string, error) {
 	if app.FileStore.FilePath == "" {
 		app.FileStore.FilePath = "/tmp/metrics-db.json" // silent default
 		logger.Log.Infof("storage file is automatically set = %s", app.FileStore.FilePath)
+	}
+	if app.ServerProtocol == "" {
+		app.ServerProtocol = HTTP
+		logger.Log.Infof("default server protocol is automatically set = %s", app.ServerProtocol)
 	}
 
 	logger.Log.Infoln(
@@ -128,6 +152,7 @@ func Setup(ctx context.Context) (*string, error) {
 		"DATABASE_DSN", app.DatabaseDSN,
 		"KEY", app.SecretKey,
 		"CRYPTO_KEY", app.CryptoKey,
+		"TRUSTED_SUBNET", app.TrustedSubnet,
 	)
 
 	// инициализация ключей шифрования
@@ -151,25 +176,15 @@ func Setup(ctx context.Context) (*string, error) {
 	// 2 - File
 	// 3 - Memory
 	var storePriority config.Store
-	var repo *handlers.Repository
+	var db repositories.StoreRepository
 	switch {
 	case app.DatabaseDSN != "": // DB
 		storePriority = config.Database
-		conn, err := pg.ConnectToDB(app.DatabaseDSN)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := pg.Bootstrap(ctx, conn); err != nil {
-			log.Fatal(err)
-		}
-		db := pg.NewStore(conn)
-		pg.DB = db
-		storage := db
-		repo = handlers.NewRepo(storage)
+		db = &pg.Store{}
 
 	default: // in memory
 		storePriority = config.Memory
-		storage := store.NewMemStorage()
+		db = &store.MemStorage{}
 		// загружать ранее сохранённые значения из указанного файла при старте сервера
 		if app.FileStore.Restore {
 			res, err := file.Reader()
@@ -178,21 +193,26 @@ func Setup(ctx context.Context) (*string, error) {
 			}
 			// если не пустой файл
 			if res != nil {
-				storage.Counter = res.Counter
-				storage.Gauge = res.Gauge
+				db = &store.MemStorage{Counter: res.Counter, Gauge: res.Gauge}
 			}
 		}
-		// инициализируем репозиторий хендлеров с указанным вариантом хранения
-		repo = handlers.NewRepo(storage)
 	}
 
+	if err = db.Initialize(ctx, app); err != nil {
+		return nil, err
+	}
+
+	// инициализируем репозиторий хендлеров с указанным вариантом хранения
+	repo := handlers.NewRepo(db)
 	// запоминаем вариант хранения
 	app.StorePriority = storePriority
-
 	// инициализируем
 	middleware.NewMiddleware(&app)
 	// инициализвруем хендлеры для работы с репозиторием
 	handlers.NewHandlers(repo, &app)
+
+	repoGRPC := grpc.NewRepo(db)
+	grpc.NewMetricHandlers(repoGRPC)
 
 	return &app.ServerAddress, nil
 }

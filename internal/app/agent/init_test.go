@@ -13,8 +13,10 @@ func TestSetup(t *testing.T) {
 		os.Setenv("KEY", "123")
 		os.Setenv("RATE_LIMIT", "1")
 		os.Setenv("ADDRESS", "localhost:8080")
+		os.Setenv("CRYPTO_KEY", "123")
+		os.Setenv("SERVER_PROTOCOL", "HTTP")
 
-		_, err := Setup()
+		_, _, err := Setup()
 		assert.NoError(t, err)
 	})
 }

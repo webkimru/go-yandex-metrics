@@ -15,6 +15,7 @@ import (
 	"github.com/webkimru/go-yandex-metrics/internal/app/agent/config"
 	"github.com/webkimru/go-yandex-metrics/internal/app/agent/logger"
 	"github.com/webkimru/go-yandex-metrics/internal/app/agent/metrics"
+	pb "github.com/webkimru/go-yandex-metrics/internal/proto"
 	"math/rand"
 	"net/http"
 	"reflect"
@@ -110,8 +111,9 @@ type Result struct {
 // Worker принимает два канала:
 // jobs - канал задач для отправки метрик
 // results - канал результатов работы
-func Worker(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []metrics.RequestMetric, results chan<- Result) {
+func Worker(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []metrics.RequestMetric, results chan<- Result, clientGRPC pb.MetricsClient) {
 	defer wg.Done()
+	var err error
 
 	for {
 		select {
@@ -120,7 +122,11 @@ func Worker(ctx context.Context, wg *sync.WaitGroup, jobs <-chan []metrics.Reque
 			return
 		// или читаем задачи
 		case job := <-jobs:
-			err := Send(ctx, fmt.Sprintf("http://%s/updates/", app.ServerAddress), job)
+			if app.ServerProtocol == GRPC {
+				err = SendThroughGRPC(ctx, job, clientGRPC)
+			} else {
+				err = Send(ctx, fmt.Sprintf("http://%s/updates/", app.ServerAddress), job)
+			}
 			if err != nil {
 				result := Result{
 					Err: err,
@@ -203,6 +209,7 @@ func Send(ctx context.Context, url string, request metrics.RequestMetricSlice) e
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("X-Real-IP", app.RealIP)
 	// Encrypt data
 	if app.SecretKey != "" {
 		// подписываем алгоритмом HMAC, используя SHA-256
@@ -223,6 +230,30 @@ func Send(ctx context.Context, url string, request metrics.RequestMetricSlice) e
 	}
 
 	defer resp.Body.Close()
+
+	return nil
+}
+
+func SendThroughGRPC(ctx context.Context, requests []metrics.RequestMetric, c pb.MetricsClient) error {
+	var protoMetricSlice []*pb.RequestMetricBatch_RequestMetric
+	for _, request := range requests {
+		protoMetricSlice = append(protoMetricSlice, &pb.RequestMetricBatch_RequestMetric{
+			Id:    request.ID,
+			Type:  request.MType,
+			Delta: request.Delta,
+			Value: request.Value,
+		})
+	}
+
+	resp, err := c.UpdateBatchMetrics(ctx, &pb.RequestMetricBatch{
+		RequestMetrics: protoMetricSlice,
+	})
+	if err != nil {
+		return err
+	}
+	if resp.Error != "" {
+		return fmt.Errorf(resp.Error)
+	}
 
 	return nil
 }

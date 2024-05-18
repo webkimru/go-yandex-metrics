@@ -19,11 +19,13 @@ type RecorderConfig struct {
 }
 
 type AppConfig struct {
-	ServerAddress string          `json:"address,omitempty"`
-	SecretKey     string          `json:"key,omitempty"`
-	CryptoKey     string          `json:"crypto_key,omitempty"`
-	PrivateKeyPEM *rsa.PrivateKey `json:"-"`
-	DatabaseDSN   string          `json:"database_dsn,omitempty"`
-	FileStore     RecorderConfig  `json:"store_file"`
-	StorePriority Store           `json:"-"`
+	ServerProtocol string          `json:"protocol,omitempty"`
+	ServerAddress  string          `json:"address,omitempty"`
+	SecretKey      string          `json:"key,omitempty"`
+	CryptoKey      string          `json:"crypto_key,omitempty"`
+	PrivateKeyPEM  *rsa.PrivateKey `json:"-"`
+	TrustedSubnet  string          `json:"trusted_subnet,omitempty"`
+	DatabaseDSN    string          `json:"database_dsn,omitempty"`
+	FileStore      RecorderConfig  `json:"store_file"`
+	StorePriority  Store           `json:"-"`
 }

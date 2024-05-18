@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"github.com/webkimru/go-yandex-metrics/internal/app/server/config"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/models"
 )
 
@@ -33,5 +34,9 @@ func (f *FakeStorage) GetAllMetrics(_ context.Context) (map[string]interface{}, 
 }
 
 func (f *FakeStorage) UpdateBatchMetrics(_ context.Context, _ []models.Metrics) error {
+	return nil
+}
+
+func (f *FakeStorage) Initialize(_ context.Context, _ config.AppConfig) error {
 	return nil
 }

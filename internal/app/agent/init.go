@@ -11,7 +11,12 @@ import (
 	"strconv"
 )
 
-func Setup() (int, error) {
+const (
+	HTTP = "HTTP"
+	GRPC = "GRPC"
+)
+
+func Setup() (string, int, error) {
 	// задаем флаги для агента
 	serverAddress := flag.String("a", "", "server address")
 	reportInterval := flag.Int("r", 0, "report interval (in seconds)")
@@ -19,6 +24,8 @@ func Setup() (int, error) {
 	secretKey := flag.String("k", "", "secret key")
 	rateLimit := flag.Int("l", 0, "rate limit (a number of workers)")
 	cryptoKey := flag.String("crypto-key", "", "path to pem public key file")
+	realIP := flag.String("i", "", "real ip")
+	serverProtocol := flag.String("s", "", "protocol: HTTP, GRPC")
 	configuration := flag.String("c", "", "path to json configuration file")
 
 	// разбор командой строки
@@ -55,24 +62,30 @@ func Setup() (int, error) {
 	if envCryptoKey := os.Getenv("CRYPTO_KEY"); envCryptoKey != "" {
 		cryptoKey = &envCryptoKey
 	}
+	if envRealIP := os.Getenv("REAL_IP"); envRealIP != "" {
+		realIP = &envRealIP
+	}
+	if envServerProtocol := os.Getenv("SERVER_PROTOCOL"); envServerProtocol != "" {
+		serverProtocol = &envServerProtocol
+	}
 	if envConfig := os.Getenv("CONFIG"); envConfig != "" {
 		configuration = &envConfig
 	}
 
 	// инициализируем логер
 	if err := logger.Initialize("info"); err != nil {
-		return 0, err
+		return "", 0, err
 	}
 
 	// читаем конфиг из файла
 	if *configuration != "" {
 		configFile, err := os.ReadFile(*configuration)
 		if err != nil {
-			return 0, fmt.Errorf("failed loading config from file=%s: %w", *configuration, err)
+			return "", 0, fmt.Errorf("failed loading config from file=%s: %w", *configuration, err)
 		}
 		// определяем для всего сервиса конфигурацию из файла
 		if err = json.Unmarshal(configFile, &app); err != nil {
-			return 0, fmt.Errorf("failed unmarshaling config from file=%s: %w", *configuration, err)
+			return "", 0, fmt.Errorf("failed unmarshaling config from file=%s: %w", *configuration, err)
 		}
 
 		logger.Log.Infof("configuration loaded successfully from file=%s", *configuration)
@@ -96,9 +109,15 @@ func Setup() (int, error) {
 	if *cryptoKey != "" {
 		app.CryptoKey = *cryptoKey
 	}
+	if *realIP != "" {
+		app.RealIP = *realIP
+	}
+	if *serverProtocol != "" {
+		app.ServerProtocol = *serverProtocol
+	}
 	// обязательные настройки
 	if app.ServerAddress == "" {
-		return 0, fmt.Errorf("destionation server address is not defined, it must be specified, for example, localhost:8080")
+		return "", 0, fmt.Errorf("destionation server address is not defined, it must be specified, for example, localhost:8080")
 	}
 	if app.RateLimit == 0 {
 		app.RateLimit = 1 // silent default
@@ -112,6 +131,14 @@ func Setup() (int, error) {
 		app.ReportInterval = 10 // silent default
 		logger.Log.Infof("default report interval is automatically set = %d", app.ReportInterval)
 	}
+	if app.RealIP == "" {
+		app.RealIP = "127.0.0.1"
+		logger.Log.Infof("default real ip is automatically set = %d", app.RealIP)
+	}
+	if app.ServerProtocol == "" {
+		app.ServerProtocol = HTTP
+		logger.Log.Infof("default server protocol is automatically set = %s", app.ServerProtocol)
+	}
 
 	logger.Log.Infoln(
 		"Starting configuration:",
@@ -121,6 +148,8 @@ func Setup() (int, error) {
 		"KEY", app.SecretKey,
 		"CRYPTO_KEY", app.CryptoKey,
 		"RATE_LIMIT", app.RateLimit,
+		"REAL_IP", app.RealIP,
+		"SERVER_PROTOCOL", app.ServerProtocol,
 	)
 
 	// инициализация ключей ассиметричного шифрования
@@ -130,5 +159,5 @@ func Setup() (int, error) {
 	}
 	app.PublicKeyPEM = publicKey
 
-	return app.RateLimit, nil
+	return app.ServerProtocol, app.RateLimit, nil
 }

@@ -7,6 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/webkimru/go-yandex-metrics/internal/app/agent/config"
 	"github.com/webkimru/go-yandex-metrics/internal/app/agent/metrics"
+	grpc2 "github.com/webkimru/go-yandex-metrics/internal/app/server/grpc"
+	"github.com/webkimru/go-yandex-metrics/internal/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/resolver"
+	"google.golang.org/grpc/test/bufconn"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -130,4 +137,79 @@ func TestAddMetricsToJob(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		cancel()
 	})
+}
+
+func TestSendThroughGRPC(t *testing.T) {
+	listen := bufconn.Listen(1024 * 1024)
+	defer listen.Close()
+	srv := grpc.NewServer()
+	defer srv.Stop()
+	proto.RegisterMetricsServer(srv, grpc2.Repo)
+	go func() {
+		err := srv.Serve(listen)
+		assert.NoError(t, err)
+	}()
+
+	resolver.SetDefaultScheme("passthrough")
+	conn, err := grpc.NewClient("bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+		return listen.Dial()
+	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	assert.NoError(t, err)
+
+	client := proto.NewMetricsClient(conn)
+
+	tests := []struct {
+		name     string
+		ctx      context.Context
+		requests []metrics.RequestMetric
+		c        proto.MetricsClient
+	}{
+		{name: "grpc test", ctx: context.Background(), requests: []metrics.RequestMetric{{ID: "someMetric", MType: "counter", Delta: 100}}, c: client},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err = SendThroughGRPC(tt.ctx, tt.requests, tt.c)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestWorker(t *testing.T) {
+	app.PollInterval = 1
+	app.ReportInterval = 1
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+	jobs := make(chan []metrics.RequestMetric, 1)
+	results := make(chan Result, 1)
+	jobs <- []metrics.RequestMetric{
+		{
+			ID:    "someMetric",
+			MType: "counter",
+			Delta: 100,
+		},
+	}
+
+	listen := bufconn.Listen(1024 * 1024)
+	defer listen.Close()
+	srv := grpc.NewServer()
+	defer srv.Stop()
+	proto.RegisterMetricsServer(srv, grpc2.Repo)
+	go func() {
+		err := srv.Serve(listen)
+		assert.NoError(t, err)
+	}()
+
+	resolver.SetDefaultScheme("passthrough")
+	conn, err := grpc.NewClient("bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+		return listen.Dial()
+	}), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	assert.NoError(t, err)
+
+	client := proto.NewMetricsClient(conn)
+
+	wg.Add(1)
+	go Worker(ctx, &wg, jobs, results, client)
+
+	time.Sleep(3 * time.Second)
+	cancel()
 }

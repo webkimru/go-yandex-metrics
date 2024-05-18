@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"github.com/webkimru/go-yandex-metrics/internal/app/server/config"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/models"
 	"sync"
 )
@@ -84,5 +85,9 @@ func (ms *MemStorage) UpdateBatchMetrics(ctx context.Context, metrics []models.M
 		}
 	}
 
+	return nil
+}
+
+func (ms *MemStorage) Initialize(ctx context.Context, _ config.AppConfig) error {
 	return nil
 }

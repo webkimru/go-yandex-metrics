@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package metrics;
+
+option go_package = "metrics/proto";
+
+message RequestMetricBatch {
+  message RequestMetric {
+    string id = 1;
+    string type = 2;
+    int64 delta = 3;
+    double value = 4; // float64
+  }
+
+  repeated RequestMetric requestMetrics = 1;
+}
+
+message ResponseMetric {
+  string error = 1;
+}
+
+service Metrics {
+  rpc UpdateBatchMetrics(RequestMetricBatch) returns (ResponseMetric);
+}

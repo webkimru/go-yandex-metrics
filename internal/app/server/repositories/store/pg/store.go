@@ -4,6 +4,7 @@ package pg
 import (
 	"context"
 	"database/sql"
+	"github.com/webkimru/go-yandex-metrics/internal/app/server/config"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/logger"
 	"github.com/webkimru/go-yandex-metrics/internal/app/server/models"
 )
@@ -232,4 +233,20 @@ func (s *Store) UpdateBatchMetrics(ctx context.Context, metrics []models.Metrics
 	}
 
 	return tx.Commit()
+}
+
+func (s *Store) Initialize(ctx context.Context, app config.AppConfig) error {
+	var err error
+	if s.Conn, err = ConnectToDB(app.DatabaseDSN); err != nil {
+		return err
+	}
+
+	if err = Bootstrap(ctx, s.Conn); err != nil {
+		return err
+	}
+
+	// нужно для грейсфула, где требуется вызов pg.DB.Conn.Close()
+	DB = s
+
+	return nil
 }

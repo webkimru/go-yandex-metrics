@@ -3,6 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/webkimru/go-yandex-metrics/internal/app/agent"
+	"github.com/webkimru/go-yandex-metrics/internal/app/agent/logger"
+	"github.com/webkimru/go-yandex-metrics/internal/app/agent/metrics"
+	pb "github.com/webkimru/go-yandex-metrics/internal/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"log"
 	"net/http"
 	_ "net/http/pprof" // подключаем пакет pprof
@@ -10,24 +16,20 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-
-	"github.com/webkimru/go-yandex-metrics/internal/app/agent"
-	"github.com/webkimru/go-yandex-metrics/internal/app/agent/logger"
-	"github.com/webkimru/go-yandex-metrics/internal/app/agent/metrics"
 )
 
 var (
-	buildVersion string
-	buildDate    string
-	buildCommit  string
+	buildVersion string = "N/A"
+	buildDate    string = "N/A"
+	buildCommit  string = "N/A"
 )
 
 var m metrics.Metric
 
 func main() {
-	fmt.Println("Build version:", checkVarBuild(buildVersion))
-	fmt.Println("Build date:", checkVarBuild(buildDate))
-	fmt.Println("Build commit:", checkVarBuild(buildCommit))
+	fmt.Println("Build version:", buildVersion)
+	fmt.Println("Build date:", buildDate)
+	fmt.Println("Build commit:", buildCommit)
 
 	// понадобится для ожидания всех горутин
 	var wg sync.WaitGroup
@@ -59,9 +61,23 @@ func main() {
 	}()
 
 	// настраиваем/инициализируем приложение
-	rateLimit, err := agent.Setup()
+	serverProtocol, rateLimit, err := agent.Setup()
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	// GRPC
+	var clientGRPC pb.MetricsClient
+	if serverProtocol == agent.GRPC {
+		// устанавливаем соединение с сервером GRPC
+		conn, err := grpc.NewClient("localhost:3200", grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer conn.Close()
+		// получаем переменную интерфейсного типа MetricsClient,
+		// через которую будем отправлять сообщения
+		clientGRPC = pb.NewMetricsClient(conn)
 	}
 
 	// получаем базовые метрики
@@ -79,7 +95,7 @@ func main() {
 	// запускаем rateLimit воркеров для наших задач
 	for w := 1; w <= rateLimit; w++ {
 		wg.Add(1)
-		go agent.Worker(ctx, &wg, jobs, results)
+		go agent.Worker(ctx, &wg, jobs, results, clientGRPC)
 	}
 
 	// для контроля ошибок отправки метрик из основного потока
@@ -104,12 +120,4 @@ func main() {
 
 	wg.Wait()
 	logger.Log.Infoln("Successful shutdown")
-}
-
-func checkVarBuild(s string) string {
-	if s == "" {
-		return "N/A"
-	}
-
-	return s
 }

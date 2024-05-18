@@ -11,6 +11,7 @@ import (
 func Routes() http.Handler {
 	r := chi.NewRouter()
 	// вариант подвключения middleware
+	r.Use(middleware.TrustedSubnet)
 	r.Use(middleware.WithLogging)
 	r.Use(middleware.WithSign)
 	r.Use(middleware.Gzip)
